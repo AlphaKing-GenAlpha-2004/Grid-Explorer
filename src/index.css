@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-theme-bg: var(--theme-bg);
+  --color-theme-text: var(--theme-text);
+  --color-theme-line: var(--theme-line);
+}
+
+:root {
+  --theme-bg: #111827;
+  --theme-text: #ffffff;
+  --theme-line: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark {
+  --theme-bg: #111827;
+  --theme-text: #ffffff;
+  --theme-line: rgba(255, 255, 255, 0.1);
+}
+
+.theme-light {
+  --theme-bg: #f9fafb;
+  --theme-text: #111827;
+  --theme-line: rgba(0, 0, 0, 0.1);
+}
+
+.theme-royal-blue {
+  --theme-bg: #1e3a8a;
+  --theme-text: #ffffff;
+  --theme-line: rgba(255, 255, 255, 0.2);
+}
+
+.theme-emerald-green {
+  --theme-bg: #065f46;
+  --theme-text: #ffffff;
+  --theme-line: rgba(209, 250, 229, 0.2);
+}
+
+.theme-crimson-red {
+  --theme-bg: #7f1d1d;
+  --theme-text: #ffffff;
+  --theme-line: rgba(254, 226, 226, 0.2);
+}
+
+.theme-violet-purple {
+  --theme-bg: #4c1d95;
+  --theme-text: #ffffff;
+  --theme-line: rgba(237, 233, 254, 0.2);
+}
+
+body {
+  background-color: var(--theme-bg);
+  color: var(--theme-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
