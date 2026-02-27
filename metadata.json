@@ -1,5 +1,5 @@
 {
-  "name": "Grid Explorer – Infinite AI Puzzle Platform",
+  "name": "Puzzlotrix-Interactive AI Puzzle Solver",
   "description": "A scalable, modular puzzle platform featuring deterministic seed-based generation, dynamic grid sizes (3-500), and AI self-solving engines for multiple puzzle types.",
   "requestFramePermissions": []
 }

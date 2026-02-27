@@ -10,7 +10,7 @@ export interface SolverResult {
 export class SolverEngine {
   private static worker: Worker | null = null;
 
-  static async solve(type: PuzzleType, algorithm: AlgorithmType, data: any, size: number): Promise<SolverResult> {
+  static async solve(type: PuzzleType, algorithm: AlgorithmType, data: any, size: number, rows?: number, cols?: number): Promise<SolverResult> {
     if (type === 'sudoku' && size > 36) {
       throw new Error("Sudoku AI solving is disabled for grids larger than 36×36 due to exponential complexity.");
     }
@@ -36,7 +36,7 @@ export class SolverEngine {
 
       this.worker?.addEventListener('message', handler);
       
-      const request: WorkerRequest = { type, algorithm, data, size };
+      const request: WorkerRequest = { type, algorithm, data, size, rows, cols };
       this.worker?.postMessage(request);
     });
   }

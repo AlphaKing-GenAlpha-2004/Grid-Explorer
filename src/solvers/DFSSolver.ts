@@ -45,14 +45,14 @@ export class DFSSolver {
     return { solution: null, stats: { timeMs: performance.now() - startTime, steps: 0, iterations, depth: 0, nodesExpanded } };
   }
 
-  static solveSliding(grid: number[][]): SolverResult {
+  static solveSliding(grid1D: number[], rows: number, cols: number): SolverResult {
     const startTime = performance.now();
-    const size = grid.length;
-    const target = this.getTarget(size);
-    const targetStr = JSON.stringify(target);
+    const total = grid1D.length;
+    const target = Array.from({ length: total }, (_, i) => (i === total - 1 ? 0 : i + 1));
+    const targetStr = target.join(',');
     
-    const stack: { grid: number[][]; empty: { r: number; c: number }; path: any[]; depth: number }[] = [
-      { grid, empty: this.findEmpty(grid), path: [grid], depth: 0 }
+    const stack: { flat: number[]; emptyIdx: number; path: number[][]; depth: number }[] = [
+      { flat: [...grid1D], emptyIdx: grid1D.indexOf(0), path: [[...grid1D]], depth: 0 }
     ];
     const visited = new Set<string>();
     
@@ -60,11 +60,12 @@ export class DFSSolver {
     let nodesExpanded = 0;
     while (stack.length > 0) {
       iterations++;
-      if (iterations > 10000) break;
+      if (iterations > 1000000) break;
+      if (performance.now() - startTime > 30000) break;
       
       const current = stack.pop()!;
       nodesExpanded++;
-      const currentStr = JSON.stringify(current.grid);
+      const currentStr = current.flat.join(',');
       
       if (currentStr === targetStr) {
         return {
@@ -76,16 +77,18 @@ export class DFSSolver {
       if (visited.has(currentStr) || current.depth > 20) continue;
       visited.add(currentStr);
       
-      const { r, c } = current.empty;
-      const moves = [
-        { r: r + 1, c }, { r: r - 1, c }, { r, c: c + 1 }, { r, c: c - 1 }
-      ].filter(m => m.r >= 0 && m.r < size && m.c >= 0 && m.c < size);
+      const r = Math.floor(current.emptyIdx / cols);
+      const c = current.emptyIdx % cols;
+      const moves: number[] = [];
+      if (r > 0) moves.push(current.emptyIdx - cols);
+      if (r < rows - 1) moves.push(current.emptyIdx + cols);
+      if (c > 0) moves.push(current.emptyIdx - 1);
+      if (c < cols - 1) moves.push(current.emptyIdx + 1);
       
-      for (const move of moves) {
-        const nextGrid = current.grid.map(row => [...row]);
-        nextGrid[r][c] = nextGrid[move.r][move.c];
-        nextGrid[move.r][move.c] = 0;
-        stack.push({ grid: nextGrid, empty: move, path: [...current.path, nextGrid], depth: current.depth + 1 });
+      for (const nextIdx of moves) {
+        const nextFlat = [...current.flat];
+        [nextFlat[current.emptyIdx], nextFlat[nextIdx]] = [nextFlat[nextIdx], nextFlat[current.emptyIdx]];
+        stack.push({ flat: nextFlat, emptyIdx: nextIdx, path: [...current.path, nextFlat], depth: current.depth + 1 });
       }
     }
     

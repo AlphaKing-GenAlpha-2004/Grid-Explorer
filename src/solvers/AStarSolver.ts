@@ -12,25 +12,80 @@ export interface SolverResult {
   };
 }
 
+class PriorityQueue<T> {
+  private heap: { priority: number; item: T }[] = [];
+
+  push(item: T, priority: number) {
+    this.heap.push({ item, priority });
+    this.bubbleUp();
+  }
+
+  pop(): T | undefined {
+    if (this.size() === 0) return undefined;
+    const top = this.heap[0];
+    const bottom = this.heap.pop()!;
+    if (this.size() > 0) {
+      this.heap[0] = bottom;
+      this.bubbleDown();
+    }
+    return top.item;
+  }
+
+  size() {
+    return this.heap.length;
+  }
+
+  private bubbleUp() {
+    let index = this.heap.length - 1;
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      if (this.heap[index].priority >= this.heap[parentIndex].priority) break;
+      [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]];
+      index = parentIndex;
+    }
+  }
+
+  private bubbleDown() {
+    let index = 0;
+    while (true) {
+      const leftChildIndex = 2 * index + 1;
+      const rightChildIndex = 2 * index + 2;
+      let smallestIndex = index;
+
+      if (leftChildIndex < this.heap.length && this.heap[leftChildIndex].priority < this.heap[smallestIndex].priority) {
+        smallestIndex = leftChildIndex;
+      }
+      if (rightChildIndex < this.heap.length && this.heap[rightChildIndex].priority < this.heap[smallestIndex].priority) {
+        smallestIndex = rightChildIndex;
+      }
+
+      if (smallestIndex === index) break;
+      [this.heap[index], this.heap[smallestIndex]] = [this.heap[smallestIndex], this.heap[index]];
+      index = smallestIndex;
+    }
+  }
+}
+
 export class AStarSolver {
   static solveMaze(grid: number[][], start: { r: number; c: number }, end: { r: number; c: number }, algorithm: string = 'astar-manhattan'): SolverResult {
     const startTime = performance.now();
-    const size = grid.length;
-    const openSet: { r: number; c: number; g: number; f: number; parent?: any }[] = [];
+    const rows = grid.length;
+    if (rows === 0) return { solution: [], stats: { timeMs: 0, steps: 0, iterations: 0, depth: 0, nodesExpanded: 0 } };
+    const cols = grid[0].length;
+    const pq = new PriorityQueue<{ r: number; c: number; g: number; f: number; parent?: any }>();
     const closedSet = new Set<string>();
     
-    openSet.push({ ...start, g: 0, f: this.heuristic(start, end) });
+    pq.push({ ...start, g: 0, f: this.heuristic(start, end) }, this.heuristic(start, end));
     
     let iterations = 0;
     let nodesExpanded = 0;
     const visited: { r: number; c: number }[] = [];
     
-    while (openSet.length > 0) {
+    while (pq.size() > 0) {
       iterations++;
-      if (iterations > 100000) break;
+      if (iterations > 1000000) break;
       
-      openSet.sort((a, b) => a.f - b.f);
-      const current = openSet.shift()!;
+      const current = pq.pop()!;
       nodesExpanded++;
       visited.push({ r: current.r, c: current.c });
       
@@ -44,7 +99,7 @@ export class AStarSolver {
         return {
           solution: path.reverse(),
           visited,
-          frontier: openSet.map(o => ({ r: o.r, c: o.c })),
+          frontier: [], // Not easily available from heap without extra work
           stats: { timeMs: performance.now() - startTime, steps: path.length, iterations, depth: current.g, nodesExpanded, pathLength: path.length }
         };
       }
@@ -56,34 +111,26 @@ export class AStarSolver {
         { r: current.r - 1, c: current.c },
         { r: current.r, c: current.c + 1 },
         { r: current.r, c: current.c - 1 }
-      ].filter(n => n.r >= 0 && n.r < size && n.c >= 0 && n.c < size && grid[n.r][n.c] === 0 && !closedSet.has(`${n.r},${n.c}`));
+      ].filter(n => n.r >= 0 && n.r < rows && n.c >= 0 && n.c < cols && grid[n.r][n.c] === 0 && !closedSet.has(`${n.r},${n.c}`));
       
       for (const neighbor of neighbors) {
         const g = current.g + 1;
         const h = this.heuristic(neighbor, end);
         const f = algorithm === 'greedy' ? h : g + h;
-        
-        const existing = openSet.find(o => o.r === neighbor.r && o.c === neighbor.c);
-        if (!existing) {
-          openSet.push({ ...neighbor, g, f, parent: current });
-        } else if (g < existing.g && algorithm !== 'greedy') {
-          existing.g = g;
-          existing.f = f;
-          existing.parent = current;
-        }
+        pq.push({ ...neighbor, g, f, parent: current }, f);
       }
     }
     
     return { solution: null, stats: { timeMs: performance.now() - startTime, steps: 0, iterations, depth: 0, nodesExpanded } };
   }
 
-  static solveSliding(grid: number[][], algorithm: string = 'astar-manhattan'): SolverResult {
+  static solveSliding(grid1D: number[], rows: number, cols: number, algorithm: string = 'astar-manhattan'): SolverResult {
     const startTime = performance.now();
-    const size = grid.length;
-    const total = size * size;
+    const total = grid1D.length;
+    const MAX_NODES = 2000000;
+    const MAX_TIME = 30000; // 30s
     
-    // Convert to 1D for efficiency
-    const startFlat = grid.flat();
+    const startFlat = [...grid1D];
     const targetFlat = Array.from({ length: total }, (_, i) => (i === total - 1 ? 0 : i + 1));
     const targetStr = targetFlat.join(',');
     
@@ -91,7 +138,7 @@ export class AStarSolver {
     const targetPos: { r: number; c: number }[] = Array(total);
     for (let i = 0; i < total; i++) {
       const val = targetFlat[i];
-      targetPos[val] = { r: Math.floor(i / size), c: i % size };
+      targetPos[val] = { r: Math.floor(i / cols), c: i % cols };
     }
 
     const manhattan = (flat: number[]): number => {
@@ -100,7 +147,7 @@ export class AStarSolver {
         const val = flat[i];
         if (val !== 0) {
           const tPos = targetPos[val];
-          dist += Math.abs(Math.floor(i / size) - tPos.r) + Math.abs((i % size) - tPos.c);
+          dist += Math.abs(Math.floor(i / cols) - tPos.r) + Math.abs((i % cols) - tPos.c);
         }
       }
       return dist;
@@ -116,33 +163,56 @@ export class AStarSolver {
 
     const getH = (flat: number[]) => algorithm === 'astar-hamming' ? hamming(flat) : manhattan(flat);
 
-    const openSet: { flat: number[]; g: number; f: number; emptyIdx: number; parent?: any }[] = [];
-    const closedSet = new Set<string>();
+    const getStateKey = (flat: number[]): bigint | string => {
+      if (total <= 16) {
+        let key = 0n;
+        for (let i = 0; i < total; i++) {
+          key = (key << 4n) | BigInt(flat[i]);
+        }
+        return key;
+      }
+      return String.fromCharCode(...flat);
+    };
+
+    const pq = new PriorityQueue<{ flat: number[]; g: number; f: number; h: number; emptyIdx: number; key: bigint | string; parent?: any }>();
+    const closedSet = new Map<bigint | string, number>(); // state -> min_g
     
     const startEmptyIdx = startFlat.indexOf(0);
-    openSet.push({ flat: startFlat, g: 0, f: getH(startFlat), emptyIdx: startEmptyIdx });
+    const startH = getH(startFlat);
+    const startKey = getStateKey(startFlat);
+    const targetKey = getStateKey(targetFlat);
+    pq.push({ flat: startFlat, g: 0, f: startH, h: startH, emptyIdx: startEmptyIdx, key: startKey }, startH);
     
     let iterations = 0;
     let nodesExpanded = 0;
     
-    while (openSet.length > 0) {
+    while (pq.size() > 0) {
       iterations++;
-      // Limit iterations to prevent UI freeze, though Web Worker handles it
-      if (iterations > 100000) break;
-      if (iterations % 1000 === 0 && performance.now() - startTime > 3000) break;
       
-      openSet.sort((a, b) => a.f - b.f);
-      const current = openSet.shift()!;
+      const current = pq.pop()!;
+      const currentKey = current.key;
+
+      // Performance safety
+      if (nodesExpanded > MAX_NODES) {
+        throw new Error("Search Space Too Large for Exact Solve. Try a smaller grid or a different algorithm.");
+      }
+      if (performance.now() - startTime > MAX_TIME) {
+        throw new Error(`Solver timed out (${MAX_TIME/1000}s limit exceeded)`);
+      }
+
+      // Check if we already found a better path to this state
+      if (closedSet.has(currentKey) && closedSet.get(currentKey)! <= current.g) {
+        continue;
+      }
+      
       nodesExpanded++;
+      closedSet.set(currentKey, current.g);
       
-      const currentStr = current.flat.join(',');
-      if (currentStr === targetStr) {
-        const path: number[][][] = [];
+      if (currentKey === targetKey) {
+        const path: number[][] = [];
         let temp: any = current;
         while (temp) {
-          const grid2D: number[][] = [];
-          for (let r = 0; r < size; r++) grid2D.push(temp.flat.slice(r * size, (r + 1) * size));
-          path.push(grid2D);
+          path.push([...temp.flat]);
           temp = temp.parent;
         }
         return {
@@ -151,39 +221,39 @@ export class AStarSolver {
         };
       }
       
-      closedSet.add(currentStr);
-      
-      const r = Math.floor(current.emptyIdx / size);
-      const c = current.emptyIdx % size;
+      const r = Math.floor(current.emptyIdx / cols);
+      const c = current.emptyIdx % cols;
       
       const neighbors: number[] = [];
-      if (r > 0) neighbors.push(current.emptyIdx - size);
-      if (r < size - 1) neighbors.push(current.emptyIdx + size);
+      if (r > 0) neighbors.push(current.emptyIdx - cols);
+      if (r < rows - 1) neighbors.push(current.emptyIdx + cols);
       if (c > 0) neighbors.push(current.emptyIdx - 1);
-      if (c < size - 1) neighbors.push(current.emptyIdx + 1);
+      if (c < cols - 1) neighbors.push(current.emptyIdx + 1);
       
       for (const nextIdx of neighbors) {
+        const val = current.flat[nextIdx];
         const nextFlat = [...current.flat];
-        [nextFlat[current.emptyIdx], nextFlat[nextIdx]] = [nextFlat[nextIdx], nextFlat[current.emptyIdx]];
+        nextFlat[current.emptyIdx] = val;
+        nextFlat[nextIdx] = 0;
         
-        const nextStr = nextFlat.join(',');
-        if (closedSet.has(nextStr)) continue;
-        
+        const nextKey = getStateKey(nextFlat);
         const g = current.g + 1;
-        const h = getH(nextFlat);
-        const f = algorithm === 'greedy' ? h : g + h;
+
+        if (closedSet.has(nextKey) && closedSet.get(nextKey)! <= g) continue;
         
-        // Check if already in openSet with better g
-        // This is still O(N) but better than nothing. 
-        // In a real app we'd use a Priority Queue + Map.
-        const existing = openSet.find(o => o.flat.join(',') === nextStr);
-        if (!existing) {
-          openSet.push({ flat: nextFlat, g, f, emptyIdx: nextIdx, parent: current });
-        } else if (g < existing.g && algorithm !== 'greedy') {
-          existing.g = g;
-          existing.f = f;
-          existing.parent = current;
+        // Incremental Manhattan distance
+        let nextH = current.h;
+        if (algorithm !== 'astar-hamming') {
+          const tPos = targetPos[val];
+          const oldDist = Math.abs(Math.floor(nextIdx / cols) - tPos.r) + Math.abs((nextIdx % cols) - tPos.c);
+          const newDist = Math.abs(Math.floor(current.emptyIdx / cols) - tPos.r) + Math.abs((current.emptyIdx % cols) - tPos.c);
+          nextH = current.h - oldDist + newDist;
+        } else {
+          nextH = getH(nextFlat);
         }
+
+        const f = algorithm === 'greedy' ? nextH : g + nextH;
+        pq.push({ flat: nextFlat, g, f, h: nextH, emptyIdx: nextIdx, key: nextKey, parent: current }, f);
       }
     }
     

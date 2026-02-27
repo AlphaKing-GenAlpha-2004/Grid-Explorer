@@ -1,19 +1,18 @@
 import { SolverResult } from './AStarSolver';
 
 export class IDAStarSolver {
-  static solveSliding(grid: number[][]): SolverResult {
+  static solveSliding(grid1D: number[], rows: number, cols: number): SolverResult {
     const startTime = performance.now();
-    const size = grid.length;
-    const total = size * size;
+    const total = grid1D.length;
     
-    const startFlat = grid.flat();
+    const startFlat = [...grid1D];
     const targetFlat = Array.from({ length: total }, (_, i) => (i === total - 1 ? 0 : i + 1));
     const targetStr = targetFlat.join(',');
 
     const targetPos: { r: number; c: number }[] = Array(total);
     for (let i = 0; i < total; i++) {
       const val = targetFlat[i];
-      targetPos[val] = { r: Math.floor(i / size), c: i % size };
+      targetPos[val] = { r: Math.floor(i / cols), c: i % cols };
     }
 
     const manhattan = (flat: number[]): number => {
@@ -22,7 +21,7 @@ export class IDAStarSolver {
         const val = flat[i];
         if (val !== 0) {
           const tPos = targetPos[val];
-          dist += Math.abs(Math.floor(i / size) - tPos.r) + Math.abs((i % size) - tPos.c);
+          dist += Math.abs(Math.floor(i / cols) - tPos.r) + Math.abs((i % cols) - tPos.c);
         }
       }
       return dist;
@@ -41,14 +40,14 @@ export class IDAStarSolver {
       if (h === 0) return -1;
       
       let min = Infinity;
-      const r = Math.floor(emptyIdx / size);
-      const c = emptyIdx % size;
+      const r = Math.floor(emptyIdx / cols);
+      const c = emptyIdx % cols;
       
       const neighbors: number[] = [];
-      if (r > 0) neighbors.push(emptyIdx - size);
-      if (r < size - 1) neighbors.push(emptyIdx + size);
+      if (r > 0) neighbors.push(emptyIdx - cols);
+      if (r < rows - 1) neighbors.push(emptyIdx + cols);
       if (c > 0) neighbors.push(emptyIdx - 1);
-      if (c < size - 1) neighbors.push(emptyIdx + 1);
+      if (c < cols - 1) neighbors.push(emptyIdx + 1);
       
       for (const nextIdx of neighbors) {
         const nextFlat = [...flat];
@@ -70,17 +69,12 @@ export class IDAStarSolver {
     const startEmptyIdx = startFlat.indexOf(0);
 
     while (true) {
-      if (performance.now() - startTime > 5000) break; // 5s timeout
+      if (performance.now() - startTime > 30000) break; // 30s timeout
       const t = search(startFlat, startEmptyIdx, 0, threshold);
       if (t === -1) {
-        const solution = path.map(p => {
-          const grid2D: number[][] = [];
-          for (let r = 0; r < size; r++) grid2D.push(p.slice(r * size, (r + 1) * size));
-          return grid2D;
-        });
         return {
-          solution,
-          stats: { timeMs: performance.now() - startTime, steps: solution.length - 1, iterations, depth: threshold, nodesExpanded }
+          solution: path.map(p => [...p]),
+          stats: { timeMs: performance.now() - startTime, steps: path.length - 1, iterations, depth: threshold, nodesExpanded }
         };
       }
       if (t === Infinity) break;

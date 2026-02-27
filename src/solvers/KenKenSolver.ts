@@ -51,7 +51,7 @@ export class KenKenSolver {
     let iterations = 0;
     const solveRecursive = (r: number, c: number): boolean => {
       iterations++;
-      if (iterations > 10000) return false; // Safety limit
+      if (iterations > 1000000) return false; // Safety limit
       
       if (c === size) { r++; c = 0; }
       if (r === size) return true;

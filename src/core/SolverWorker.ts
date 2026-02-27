@@ -9,9 +9,10 @@ import { MinesweeperSolver } from '../solvers/MinesweeperSolver';
 import { NonogramSolver } from '../solvers/NonogramSolver';
 
 import { KenKenSolver } from '../solvers/KenKenSolver';
+import { MazeSolvers } from '../solvers/MazeSolvers';
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const { type, algorithm, data, size } = e.data;
+  const { type, algorithm, data, size, rows, cols } = e.data;
   let result: any;
 
   try {
@@ -21,16 +22,20 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           if (algorithm === 'bfs') return BFSSolver.solveMaze(data.grid, data.start, data.end);
           else if (algorithm === 'dfs') return DFSSolver.solveMaze(data.grid, data.start, data.end);
           else if (algorithm === 'dijkstra') return DijkstraSolver.solveMaze(data.grid, data.start, data.end);
+          else if (algorithm === 'hybrid') return MazeSolvers.deadEndFilling(data.grid, data.start, data.end);
           else return AStarSolver.solveMaze(data.grid, data.start, data.end, algorithm);
-        case 'sliding-puzzle':
-          if (algorithm === 'bfs') return BFSSolver.solveSliding(data.grid);
-          else if (algorithm === 'dfs') return DFSSolver.solveSliding(data.grid);
-          else if (algorithm === 'idastar') return IDAStarSolver.solveSliding(data.grid);
-          else return AStarSolver.solveSliding(data.grid, algorithm);
+        case 'sliding-puzzle': {
+          const r = rows || size;
+          const c = cols || size;
+          if (algorithm === 'bfs') return BFSSolver.solveSliding(data.grid, r, c);
+          else if (algorithm === 'dfs') return DFSSolver.solveSliding(data.grid, r, c);
+          else if (algorithm === 'idastar') return IDAStarSolver.solveSliding(data.grid, r, c);
+          else return AStarSolver.solveSliding(data.grid, r, c, algorithm);
+        }
         case 'sudoku':
           return BacktrackingSolver.solveSudoku(data, algorithm);
-        case 'latin-square':
-          return BacktrackingSolver.solveLatinSquare(data, algorithm);
+        case 'math-latin-square':
+          return BacktrackingSolver.solveMathLatinSquare(data, algorithm);
         case 'n-queens':
           return BacktrackingSolver.solveNQueens(size, algorithm);
         case 'minesweeper':
@@ -45,7 +50,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     })();
 
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Solving timed out (3s limit exceeded)")), 3000)
+      setTimeout(() => reject(new Error("Solving timed out (30s limit exceeded)")), 30000)
     );
 
     result = await Promise.race([solvePromise, timeoutPromise]);

@@ -1,4 +1,5 @@
 import { SolverResult } from './AStarSolver';
+import { MathLatinSquareData, MathOp } from '../types';
 
 export class BacktrackingSolver {
   static solveSudoku(grid: number[][], algorithm: string = 'backtracking'): SolverResult {
@@ -12,16 +13,13 @@ export class BacktrackingSolver {
       iterations++;
       nodesExpanded++;
       
-      // Abort if timeout exceeded (3 seconds) or iteration limit
+      // Abort if timeout exceeded (30 seconds) or iteration limit
       if (iterations % 1000 === 0) {
-        if (performance.now() - startTime > 3000) return false;
+        if (performance.now() - startTime > 30000) return false;
       }
-      if (iterations > 1000000) return false;
+      if (iterations > 2000000) return false;
 
-      // Depth limit for larger grids
-      if (size > 9 && depth > (size * size) / 2) return false;
-      
-      const empty = algorithm === 'backtracking-mrv' || size > 9 ? this.findMRV(board) : this.findEmpty(board);
+      const empty = this.findMRV(board);
       if (!empty) return true;
       
       const { r, c } = empty;
@@ -128,6 +126,76 @@ export class BacktrackingSolver {
     };
     
     const success = solve();
+    return {
+      solution: success ? board : null,
+      stats: { timeMs: performance.now() - startTime, steps: 0, iterations, depth: 0, nodesExpanded }
+    };
+  }
+
+  static solveMathLatinSquare(data: MathLatinSquareData, algorithm: string = 'backtracking'): SolverResult {
+    const startTime = performance.now();
+    const size = data.grid.length;
+    const board = data.grid.map(row => [...row]);
+    let iterations = 0;
+    let nodesExpanded = 0;
+
+    const calculate = (values: number[], operators: MathOp[]): number => {
+      let res = values[0];
+      for (let i = 0; i < operators.length; i++) {
+        const op = operators[i];
+        const next = values[i + 1];
+        if (op === '+') res += next;
+        else if (op === '-') res -= next;
+        else if (op === '*') res *= next;
+        else if (op === '/') res /= next;
+      }
+      return res;
+    };
+
+    const isArithmeticValid = (r: number, c: number): boolean => {
+      // Check row if full
+      if (board[r].every(v => v !== 0)) {
+        const res = calculate(board[r], data.rowOps[r]);
+        if (Math.abs(res - data.rowTargets[r]) > 0.001) return false;
+      }
+      // Check column if full
+      const colValues = board.map(row => row[c]);
+      if (colValues.every(v => v !== 0)) {
+        const res = calculate(colValues, data.colOps[c]);
+        if (Math.abs(res - data.colTargets[c]) > 0.001) return false;
+      }
+      return true;
+    };
+
+    const solve = (depth: number = 0): boolean => {
+      iterations++;
+      nodesExpanded++;
+      
+      if (iterations % 1000 === 0) {
+        if (performance.now() - startTime > 30000) return false;
+      }
+      if (iterations > 1000000) return false;
+
+      const empty = algorithm === 'backtracking-mrv' || size > 6 ? this.findMRV(board) : this.findEmpty(board);
+      if (!empty) return true;
+      
+      const { r, c } = empty;
+      const options = this.getOptions(board, r, c);
+      
+      for (const val of options) {
+        board[r][c] = val;
+        
+        // Pruning: check arithmetic if row/col is full
+        if (isArithmeticValid(r, c)) {
+          if (solve(depth + 1)) return true;
+        }
+        
+        board[r][c] = 0;
+      }
+      return false;
+    };
+
+    const success = solve(0);
     return {
       solution: success ? board : null,
       stats: { timeMs: performance.now() - startTime, steps: 0, iterations, depth: 0, nodesExpanded }

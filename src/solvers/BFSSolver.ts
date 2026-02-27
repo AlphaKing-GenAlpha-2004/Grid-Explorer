@@ -43,48 +43,51 @@ export class BFSSolver {
     return { solution: null, stats: { timeMs: performance.now() - startTime, steps: 0, iterations, depth: 0, nodesExpanded } };
   }
 
-  static solveSliding(grid: number[][]): SolverResult {
+  static solveSliding(grid1D: number[], rows: number, cols: number): SolverResult {
     const startTime = performance.now();
-    const size = grid.length;
-    const target = this.getTarget(size);
-    const targetStr = JSON.stringify(target);
+    const total = grid1D.length;
+    const target = Array.from({ length: total }, (_, i) => (i === total - 1 ? 0 : i + 1));
+    const targetStr = target.join(',');
     
-    const queue: { grid: number[][]; empty: { r: number; c: number }; path: any[] }[] = [
-      { grid, empty: this.findEmpty(grid), path: [grid] }
+    const queue: { flat: number[]; emptyIdx: number; path: number[][] }[] = [
+      { flat: [...grid1D], emptyIdx: grid1D.indexOf(0), path: [[...grid1D]] }
     ];
     const visited = new Set<string>();
-    visited.add(JSON.stringify(grid));
+    visited.add(grid1D.join(','));
     
     let iterations = 0;
     let nodesExpanded = 0;
     while (queue.length > 0) {
       iterations++;
-      if (iterations > 20000) break;
+      if (iterations > 1000000) break;
+      if (performance.now() - startTime > 30000) break;
       
       const current = queue.shift()!;
       nodesExpanded++;
       
-      if (JSON.stringify(current.grid) === targetStr) {
+      if (current.flat.join(',') === targetStr) {
         return {
           solution: current.path,
           stats: { timeMs: performance.now() - startTime, steps: current.path.length - 1, iterations, depth: current.path.length, nodesExpanded }
         };
       }
       
-      const { r, c } = current.empty;
-      const moves = [
-        { r: r + 1, c }, { r: r - 1, c }, { r, c: c + 1 }, { r, c: c - 1 }
-      ].filter(m => m.r >= 0 && m.r < size && m.c >= 0 && m.c < size);
+      const r = Math.floor(current.emptyIdx / cols);
+      const c = current.emptyIdx % cols;
+      const moves: number[] = [];
+      if (r > 0) moves.push(current.emptyIdx - cols);
+      if (r < rows - 1) moves.push(current.emptyIdx + cols);
+      if (c > 0) moves.push(current.emptyIdx - 1);
+      if (c < cols - 1) moves.push(current.emptyIdx + 1);
       
-      for (const move of moves) {
-        const nextGrid = current.grid.map(row => [...row]);
-        nextGrid[r][c] = nextGrid[move.r][move.c];
-        nextGrid[move.r][move.c] = 0;
+      for (const nextIdx of moves) {
+        const nextFlat = [...current.flat];
+        [nextFlat[current.emptyIdx], nextFlat[nextIdx]] = [nextFlat[nextIdx], nextFlat[current.emptyIdx]];
         
-        const nextStr = JSON.stringify(nextGrid);
+        const nextStr = nextFlat.join(',');
         if (!visited.has(nextStr)) {
           visited.add(nextStr);
-          queue.push({ grid: nextGrid, empty: move, path: [...current.path, nextGrid] });
+          queue.push({ flat: nextFlat, emptyIdx: nextIdx, path: [...current.path, nextFlat] });
         }
       }
     }

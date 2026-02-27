@@ -1,5 +1,5 @@
 export type PuzzleType = 
-  | 'latin-square' 
+  | 'math-latin-square'
   | 'sudoku' 
   | 'maze' 
   | 'n-queens' 
@@ -55,6 +55,17 @@ export interface MazeData {
   carvedCount: number;
 }
 
+export type MathOp = '+' | '-' | '*' | '/';
+
+export interface MathLatinSquareData {
+  grid: number[][]; // User input grid
+  solution: number[][];
+  rowOps: MathOp[][]; // [row][op_index]
+  colOps: MathOp[][]; // [col][op_index]
+  rowTargets: number[];
+  colTargets: number[];
+}
+
 export interface SolveStats {
   timeMs: number;
   steps: number;
@@ -88,10 +99,13 @@ export interface KenKenData {
 export interface PuzzleState {
   type: PuzzleType;
   size: number;
+  rows?: number;
+  cols?: number;
   seed: number | null; // null means random
   actualSeed: number;
   generationId: number;
   data: any;
+  initialData: any;
   solution?: any;
   isSolved: boolean;
   solveStats?: SolveStats;
@@ -105,6 +119,8 @@ export interface WorkerRequest {
   algorithm: AlgorithmType;
   data: any;
   size: number;
+  rows?: number;
+  cols?: number;
 }
 
 export interface WorkerResponse {

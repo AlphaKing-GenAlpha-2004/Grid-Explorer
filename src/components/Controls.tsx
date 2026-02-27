@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { PuzzleType, ThemeType, AlgorithmType, SolverConfig } from '../types';
-import { RefreshCw, Play, Shuffle, X, Settings2 } from 'lucide-react';
+import { RefreshCw, Play, Shuffle, X, Settings2, CheckCircle2 } from 'lucide-react';
 import { getAlgorithmsForPuzzle, MAZE_GEN_ALGORITHMS } from '../core/AlgorithmRegistry';
+import { MIN_GRID_SIZE, MAX_GRID_SIZE, THEME_COLORS } from '../constants';
 
 interface ControlsProps {
   puzzleType: PuzzleType;
   setPuzzleType: (t: PuzzleType) => void;
   gridSize: number;
   setGridSize: (s: number) => void;
+  rows?: number;
+  setRows?: (r: number) => void;
+  cols?: number;
+  setCols?: (c: number) => void;
   seed: number | null;
   setSeed: (s: number | null) => void;
   theme: ThemeType;
@@ -19,22 +24,25 @@ interface ControlsProps {
   onCancel: () => void;
   onCheck: () => void;
   onReveal: () => void;
+  onReset: () => void;
   isSolving: boolean;
 }
 
 export const Controls: React.FC<ControlsProps> = ({
   puzzleType, setPuzzleType,
   gridSize, setGridSize,
+  rows = 4, setRows,
+  cols = 4, setCols,
   seed, setSeed,
   theme, setTheme,
   solverConfig, setSolverConfig,
-  onGenerate, onSolve, onCancel, onCheck, onReveal,
+  onGenerate, onSolve, onCancel, onCheck, onReveal, onReset,
   isSolving
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const puzzleTypes: { value: PuzzleType; label: string }[] = [
-    { value: 'latin-square', label: 'Latin Square' },
+    { value: 'math-latin-square', label: 'Math Latin Square' },
     { value: 'sudoku', label: 'Sudoku' },
     { value: 'maze', label: 'Maze' },
     { value: 'n-queens', label: 'N-Queens' },
@@ -42,15 +50,6 @@ export const Controls: React.FC<ControlsProps> = ({
     { value: 'nonogram', label: 'Nonogram' },
     { value: 'kenken', label: 'KenKen' },
     { value: 'sliding-puzzle', label: 'Sliding Puzzle' },
-  ];
-
-  const themes: { value: ThemeType; label: string; color: string }[] = [
-    { value: 'dark', label: 'Dark Mode', color: '#111827' },
-    { value: 'light', label: 'Light Mode', color: '#F9FAFB' },
-    { value: 'royal-blue', label: 'Royal Blue', color: '#1E3A8A' },
-    { value: 'emerald-green', label: 'Emerald Green', color: '#065F46' },
-    { value: 'crimson-red', label: 'Crimson Red', color: '#7F1D1D' },
-    { value: 'violet-purple', label: 'Violet / Purple', color: '#4C1D95' },
   ];
 
   const algorithms = getAlgorithmsForPuzzle(puzzleType, gridSize);
@@ -68,12 +67,12 @@ export const Controls: React.FC<ControlsProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-theme-line shadow-2xl w-full max-w-md text-theme-text">
+    <div className="flex flex-col gap-6 p-6 bg-[#2A2A2A] backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl w-full max-w-md text-[#EAEAEA]">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-black uppercase tracking-tighter italic">Engine Config</h2>
+        <h2 className="text-lg font-black uppercase tracking-tighter italic text-[#FF7A00]">Engine Config</h2>
         <button 
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className={`p-2 rounded-lg transition-colors ${showAdvanced ? 'bg-blue-500/20 text-blue-400' : 'hover:bg-white/10'}`}
+          className={`p-2 rounded-lg transition-colors ${showAdvanced ? 'bg-[#FF7A00]/20 text-[#FF7A00]' : 'hover:bg-white/10'}`}
         >
           <Settings2 size={20} />
         </button>
@@ -85,11 +84,12 @@ export const Controls: React.FC<ControlsProps> = ({
               <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Maze Generation Algorithm</label>
               <select
                 value={solverConfig.genAlgorithm || 'dfs'}
+                disabled={isSolving}
                 onChange={(e) => setSolverConfig({ ...solverConfig, genAlgorithm: e.target.value as any })}
-                className="w-full bg-black/20 border border-theme-line rounded-xl p-3 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer text-theme-text"
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF7A00] transition-all appearance-none cursor-pointer text-[#EAEAEA] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {MAZE_GEN_ALGORITHMS.map(a => (
-                  <option key={a.value} value={a.value} className="bg-neutral-900">{a.label}</option>
+                  <option key={a.value} value={a.value} className="bg-[#1E1E1E]">{a.label}</option>
                 ))}
               </select>
             </div>
@@ -99,6 +99,7 @@ export const Controls: React.FC<ControlsProps> = ({
             <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Puzzle Type</label>
             <select
               value={puzzleType}
+              disabled={isSolving}
               onChange={(e) => {
                 const newType = e.target.value as PuzzleType;
                 setPuzzleType(newType);
@@ -119,47 +120,128 @@ export const Controls: React.FC<ControlsProps> = ({
                   setSolverConfig({ ...solverConfig, algorithm: newAlgos[0].value });
                 }
               }}
-              className="w-full bg-black/20 border border-theme-line rounded-xl p-3 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer text-theme-text"
+              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF7A00] transition-all appearance-none cursor-pointer text-[#EAEAEA] disabled:opacity-50 disabled:cursor-not-allowed"
             >
             {puzzleTypes.map(t => (
-              <option key={t.value} value={t.value} className="bg-neutral-900">{t.label}</option>
+              <option key={t.value} value={t.value} className="bg-[#1E1E1E]">{t.label}</option>
             ))}
           </select>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Grid Size: {gridSize}</label>
-            {puzzleType === 'sudoku' && (
-              <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Perfect Square Required</span>
-            )}
+        {puzzleType === 'sliding-puzzle' ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Rows: {rows}</label>
+              </div>
+              <div className="flex gap-4 items-center">
+                <input
+                  type="range"
+                  min={3}
+                  max={10}
+                  value={rows}
+                  disabled={isSolving}
+                  onChange={(e) => setRows?.(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF7A00] disabled:opacity-50"
+                />
+                <input 
+                  type="number"
+                  min={3}
+                  max={10}
+                  value={rows}
+                  disabled={isSolving}
+                  onChange={(e) => setRows?.(Math.max(3, Math.min(10, parseInt(e.target.value) || 3)))}
+                  className="w-16 bg-black/40 border border-white/10 rounded-lg p-1 text-center text-xs outline-none focus:border-[#FF7A00] disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Columns: {cols}</label>
+              </div>
+              <div className="flex gap-4 items-center">
+                <input
+                  type="range"
+                  min={3}
+                  max={10}
+                  value={cols}
+                  disabled={isSolving}
+                  onChange={(e) => setCols?.(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF7A00] disabled:opacity-50"
+                />
+                <input 
+                  type="number"
+                  min={3}
+                  max={10}
+                  value={cols}
+                  disabled={isSolving}
+                  onChange={(e) => setCols?.(Math.max(3, Math.min(10, parseInt(e.target.value) || 3)))}
+                  className="w-16 bg-black/40 border border-white/10 rounded-lg p-1 text-center text-xs outline-none focus:border-[#FF7A00] disabled:opacity-50"
+                />
+              </div>
+            </div>
           </div>
-          <input
-            type="range"
-            min="3"
-            max="500"
-            value={gridSize}
-            onChange={(e) => {
-              let val = parseInt(e.target.value);
-              if (puzzleType === 'sudoku') {
-                const root = Math.sqrt(val);
-                if (!Number.isInteger(root)) {
-                  const nearestRoot = Math.round(root);
-                  val = Math.max(4, nearestRoot * nearestRoot);
-                }
-              }
-              setGridSize(val);
-            }}
-            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
-          />
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Grid Size: {gridSize}</label>
+              {puzzleType === 'sudoku' && (
+                <span className="text-[8px] font-bold text-[#FF7A00] uppercase tracking-tighter">Perfect Square Required</span>
+              )}
+            </div>
+            <div className="flex gap-4 items-center">
+              <input
+                type="range"
+                min={MIN_GRID_SIZE}
+                max={MAX_GRID_SIZE}
+                value={gridSize}
+                disabled={isSolving}
+                onChange={(e) => {
+                  let val = parseInt(e.target.value);
+                  if (puzzleType === 'sudoku') {
+                    const root = Math.sqrt(val);
+                    if (!Number.isInteger(root)) {
+                      const nearestRoot = Math.round(root);
+                      val = Math.max(4, nearestRoot * nearestRoot);
+                    }
+                  }
+                  setGridSize(val);
+                }}
+                className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF7A00] disabled:opacity-50"
+              />
+              <input 
+                type="number"
+                min={MIN_GRID_SIZE}
+                max={MAX_GRID_SIZE}
+                value={gridSize}
+                disabled={isSolving}
+                onChange={(e) => {
+                  let val = parseInt(e.target.value) || MIN_GRID_SIZE;
+                  val = Math.max(MIN_GRID_SIZE, Math.min(MAX_GRID_SIZE, val));
+                  
+                  if (puzzleType === 'sudoku') {
+                    const root = Math.sqrt(val);
+                    if (!Number.isInteger(root)) {
+                      const nearestRoot = Math.round(root);
+                      val = Math.max(4, nearestRoot * nearestRoot);
+                    }
+                  }
+                  
+                  setGridSize(val);
+                }}
+                className="w-16 bg-black/40 border border-white/10 rounded-lg p-1 text-center text-xs outline-none focus:border-[#FF7A00] disabled:opacity-50"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Generation Mode</label>
             <button 
               onClick={toggleRandomMode}
-              className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${seed === null ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}
+              disabled={isSolving}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${seed === null ? 'bg-[#22C55E]/20 text-[#22C55E]' : 'bg-[#FF7A00]/20 text-[#FF7A00]'} disabled:opacity-50`}
             >
               {seed === null ? 'RANDOM' : 'SEED'}
             </button>
@@ -169,12 +251,14 @@ export const Controls: React.FC<ControlsProps> = ({
               <input
                 type="number"
                 value={seed}
+                disabled={isSolving}
                 onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
-                className="flex-1 bg-black/20 border border-theme-line rounded-xl p-3 outline-none focus:border-blue-500 transition-all font-mono text-sm text-theme-text"
+                className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF7A00] transition-all font-mono text-sm text-[#EAEAEA] disabled:opacity-50"
               />
               <button
                 onClick={handleRandomSeed}
-                className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+                disabled={isSolving}
+                className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors disabled:opacity-50"
                 title="Random Seed"
               >
                 <Shuffle size={18} />
@@ -185,16 +269,16 @@ export const Controls: React.FC<ControlsProps> = ({
       </div>
 
       {showAdvanced && (
-        <div className="space-y-4 pt-4 border-t border-theme-line animate-in fade-in slide-in-from-top-2">
+        <div className="space-y-4 pt-4 border-t border-white/10 animate-in fade-in slide-in-from-top-2">
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Solving Algorithm</label>
             <select
               value={solverConfig.algorithm}
               onChange={(e) => setSolverConfig({ ...solverConfig, algorithm: e.target.value as AlgorithmType })}
-              className="w-full bg-black/20 border border-theme-line rounded-xl p-3 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer text-theme-text"
+              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 outline-none focus:border-[#FF7A00] transition-all appearance-none cursor-pointer text-[#EAEAEA]"
             >
               {algorithms.map(a => (
-                <option key={a.value} value={a.value} className="bg-neutral-900">{a.label}</option>
+                <option key={a.value} value={a.value} className="bg-[#1E1E1E]">{a.label}</option>
               ))}
             </select>
           </div>
@@ -210,33 +294,18 @@ export const Controls: React.FC<ControlsProps> = ({
               max="100"
               value={solverConfig.speed}
               onChange={(e) => setSolverConfig({ ...solverConfig, speed: parseInt(e.target.value) })}
-              className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#FF7A00]"
             />
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
+          <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
             <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Instant Solve</label>
             <button 
               onClick={() => setSolverConfig({ ...solverConfig, instant: !solverConfig.instant })}
-              className={`w-10 h-5 rounded-full transition-colors relative ${solverConfig.instant ? 'bg-blue-500' : 'bg-white/10'}`}
+              className={`w-10 h-5 rounded-full transition-colors relative ${solverConfig.instant ? 'bg-[#FF7A00]' : 'bg-white/10'}`}
             >
               <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${solverConfig.instant ? 'left-6' : 'left-1'}`} />
             </button>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Theme</label>
-            <div className="flex flex-wrap gap-3">
-              {themes.map(t => (
-                <button
-                  key={t.value}
-                  onClick={() => setTheme(t.value)}
-                  className={`w-8 h-8 rounded-full border-2 transition-all ${theme === t.value ? 'border-blue-500 scale-110 shadow-lg' : 'border-white/10 hover:border-white/30'}`}
-                  style={{ backgroundColor: t.color }}
-                  title={t.label}
-                />
-              ))}
-            </div>
           </div>
         </div>
       )}
@@ -245,16 +314,25 @@ export const Controls: React.FC<ControlsProps> = ({
         <button
           onClick={onGenerate}
           disabled={isSolving}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-blue-900/20 text-sm"
+          className="flex-1 flex items-center justify-center gap-2 bg-[#FF7A00] hover:bg-[#FF8C1A] disabled:bg-neutral-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-orange-900/20 text-sm"
         >
           <RefreshCw size={16} className={isSolving ? 'animate-spin' : ''} />
-          Generate
+          New
+        </button>
+
+        <button
+          onClick={onReset}
+          disabled={isSolving}
+          className="flex-1 flex items-center justify-center gap-2 bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all active:scale-95 text-sm"
+        >
+          <RefreshCw size={16} className="rotate-180" />
+          Reset
         </button>
         
         {isSolving ? (
           <button
             onClick={onCancel}
-            className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-red-900/20 text-sm"
+            className="flex-1 flex items-center justify-center gap-2 bg-[#FF4C4C] hover:bg-[#FF6666] text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-red-900/20 text-sm"
           >
             <X size={16} />
             Cancel
@@ -262,7 +340,7 @@ export const Controls: React.FC<ControlsProps> = ({
         ) : (
           <button
             onClick={onSolve}
-            className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-emerald-900/20 text-sm"
+            className="flex-1 flex items-center justify-center gap-2 bg-[#22C55E] hover:bg-[#2DD4BF] text-white font-bold py-3 rounded-xl transition-all active:scale-95 shadow-lg shadow-emerald-900/20 text-sm"
           >
             <Play size={16} />
             AI Solve
@@ -270,7 +348,7 @@ export const Controls: React.FC<ControlsProps> = ({
         )}
       </div>
 
-      {(puzzleType === 'nonogram' || puzzleType === 'kenken') && !isSolving && (
+      {['nonogram', 'kenken', 'sudoku', 'math-latin-square', 'n-queens'].includes(puzzleType) && !isSolving && (
         <div className="flex gap-2">
           <button
             onClick={onCheck}

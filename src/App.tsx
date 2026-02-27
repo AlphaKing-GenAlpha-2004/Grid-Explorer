@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PuzzleType, ThemeType, PuzzleState, SolverConfig } from './types';
 import { Background } from './components/Backgrounds';
 import { Controls } from './components/Controls';
 import { StatsPanel } from './components/StatsPanel';
 import { GridRenderer } from './components/GridRenderer';
-import { LatinSquareEngine } from './engines/LatinSquare';
+import { MIN_GRID_SIZE, MAX_GRID_SIZE, THEME_COLORS } from './constants';
+import { MathLatinSquareEngine } from './engines/MathLatinSquare';
 import { SudokuEngine } from './engines/Sudoku';
 import { MazeEngine } from './engines/Maze';
 import { NQueensEngine } from './engines/NQueens';
@@ -15,20 +16,16 @@ import { SlidingPuzzleEngine } from './engines/SlidingPuzzle';
 import { SolverEngine } from './solvers/SolverEngine';
 import { calculateStateSpace } from './utils/math';
 import { motion, AnimatePresence } from 'motion/react';
-import { Github, Info, AlertTriangle } from 'lucide-react';
+import { Github, Info, AlertTriangle, CheckCircle2, Play } from 'lucide-react';
+import { ValidationEngine, ValidationResult } from './services/ValidationEngine';
 
 export default function App() {
-  const [puzzleType, setPuzzleType] = useState<PuzzleType>('latin-square');
+  const [puzzleType, setPuzzleType] = useState<PuzzleType>('math-latin-square');
   const [gridSize, setGridSize] = useState<number>(5);
+  const [rows, setRows] = useState<number>(4);
+  const [cols, setCols] = useState<number>(4);
   const [seed, setSeed] = useState<number | null>(123456);
-  const [theme, setTheme] = useState<ThemeType>(() => {
-    const saved = localStorage.getItem('grid-explorer-theme');
-    return (saved as ThemeType) || 'dark';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('grid-explorer-theme', theme);
-  }, [theme]);
+  const [theme, setTheme] = useState<ThemeType>('dark');
   const [solverConfig, setSolverConfig] = useState<SolverConfig>({
     algorithm: 'backtracking',
     speed: 50,
@@ -38,59 +35,124 @@ export default function App() {
   const [isSolving, setIsSolving] = useState(false);
   const [genTime, setGenTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [generationCount, setGenerationCount] = useState(0);
+  const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
+  const [validation, setValidation] = useState<ValidationResult>({ isValid: true, conflicts: [], errors: [] });
+  const [isDragging, setIsDragging] = useState<'start' | 'end' | null>(null);
+  const [timer, setTimer] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    let interval: any;
+    if (puzzle && !puzzle.isSolved && !isSolving && !isPaused) {
+      interval = setInterval(() => {
+        setTimer(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [puzzle?.isSolved, isSolving, puzzle?.generationId, isPaused]);
+
+  useEffect(() => {
+    // Reset puzzle state when grid size changes
+    setPuzzle(null);
+    setValidation({ isValid: true, conflicts: [], errors: [] });
+    setTimer(0);
+    setIsPaused(false);
+    setError(null);
+    setSuccess(null);
+    setSelectedCell(null);
+    SolverEngine.terminate();
+  }, [gridSize, rows, cols, puzzleType]);
 
   const generatePuzzle = useCallback(() => {
     const startTime = performance.now();
     let data: any;
     let solution: any;
+    
+    // Clamp grid size
+    const clampedSize = Math.max(MIN_GRID_SIZE, Math.min(MAX_GRID_SIZE, gridSize));
     const currentSeed = seed === null ? Math.floor(Math.random() * 1e12) : seed;
     
-    console.log(`[Engine] Generating ${puzzleType} | Size: ${gridSize} | Seed: ${currentSeed} | GenID: ${generationCount}`);
-
     try {
       switch (puzzleType) {
-        case 'latin-square':
-          data = LatinSquareEngine.generate(gridSize, currentSeed);
+        case 'math-latin-square': {
+          const mathData = MathLatinSquareEngine.generate(clampedSize, currentSeed);
+          data = mathData;
+          solution = mathData.solution;
           break;
+        }
         case 'sudoku': {
-          const sudokuData = SudokuEngine.generate(gridSize, currentSeed);
+          let finalSize = clampedSize;
+          const root = Math.sqrt(finalSize);
+          if (!Number.isInteger(root)) {
+            const nearestRoot = Math.round(root);
+            finalSize = Math.max(4, nearestRoot * nearestRoot);
+          }
+          const sudokuData = SudokuEngine.generate(finalSize, currentSeed);
           data = sudokuData.grid;
           solution = sudokuData.solution;
           break;
         }
         case 'maze':
-          data = MazeEngine.generate(gridSize, currentSeed, solverConfig.genAlgorithm);
+          data = MazeEngine.generate(clampedSize, currentSeed, solverConfig.genAlgorithm);
+          solution = null; // Maze solution is found by solver
           break;
         case 'n-queens':
-          data = NQueensEngine.generate(gridSize, currentSeed);
+          data = NQueensEngine.generate(clampedSize, currentSeed);
+          solution = null; // Found by solver
           break;
         case 'minesweeper':
-          data = MinesweeperEngine.generate(gridSize, currentSeed);
+          data = MinesweeperEngine.generate(clampedSize, currentSeed);
+          solution = data.grid; // In minesweeper, the grid is the solution
           break;
         case 'nonogram':
-          data = NonogramEngine.generate(gridSize, currentSeed);
+          data = NonogramEngine.generate(clampedSize, currentSeed);
+          solution = data.solution;
           break;
         case 'kenken':
-          data = KenKenEngine.generate(gridSize, currentSeed);
+          data = KenKenEngine.generate(clampedSize, currentSeed);
+          solution = data.solution;
           break;
-        case 'sliding-puzzle':
-          data = SlidingPuzzleEngine.generate(gridSize, currentSeed);
+        case 'sliding-puzzle': {
+          const clampedRows = Math.max(3, Math.min(10, rows));
+          const clampedCols = Math.max(3, Math.min(10, cols));
+          const slidingData = SlidingPuzzleEngine.generate(clampedRows, clampedCols, currentSeed);
+          data = slidingData;
+          // Target state is [1, 2, 3, ..., 0]
+          solution = Array.from({ length: clampedRows * clampedCols }, (_, i) => (i === clampedRows * clampedCols - 1 ? 0 : i + 1));
           break;
+        }
+      }
+
+      let finalRows = puzzleType === 'sliding-puzzle' ? Math.max(3, Math.min(10, rows)) : clampedSize;
+      let finalCols = puzzleType === 'sliding-puzzle' ? Math.max(3, Math.min(10, cols)) : clampedSize;
+
+      if (puzzleType === 'maze' && data?.grid && data.grid.length > 0) {
+        finalRows = data.grid.length;
+        finalCols = data.grid[0].length;
       }
 
       setPuzzle({
         type: puzzleType,
-        size: gridSize,
+        size: clampedSize,
+        rows: finalRows,
+        cols: finalCols,
         seed: seed,
         actualSeed: currentSeed,
         generationId: generationCount,
         data: data,
+        initialData: JSON.parse(JSON.stringify(data)),
         solution: solution,
         isSolved: false
       });
       setGenTime(performance.now() - startTime);
+      setTimer(0);
+      setIsPaused(false);
       setError(null);
+      setSuccess(null);
+      setValidation({ isValid: true, conflicts: [], errors: [] });
+      setSelectedCell(null);
     } catch (err) {
       console.error("Generation failed:", err);
       setError("Generation failed for this size/type combination.");
@@ -99,7 +161,14 @@ export default function App() {
 
   useEffect(() => {
     generatePuzzle();
-  }, [puzzleType, gridSize, seed, solverConfig.genAlgorithm, generationCount]);
+  }, [puzzleType, gridSize, rows, cols, seed, solverConfig.genAlgorithm, generationCount]);
+
+  useEffect(() => {
+    if (puzzle && !isSolving) {
+      const result = ValidationEngine.validate(puzzle.type, puzzle.size, puzzle.data, puzzle.solution, false, puzzle.isSolved);
+      setValidation(result);
+    }
+  }, [puzzle?.data, puzzle?.type, puzzle?.size, puzzle?.solution, isSolving, puzzle?.isSolved]);
 
   const handleGenerate = () => {
     setGenerationCount(prev => prev + 1);
@@ -107,47 +176,104 @@ export default function App() {
 
   const handleSolve = async () => {
     if (!puzzle || isSolving) return;
+    
     setIsSolving(true);
     setError(null);
+    setSuccess(null);
+    const solveStartTime = performance.now();
     
     try {
-      const result = await SolverEngine.solve(puzzle.type, solverConfig.algorithm, puzzle.data, puzzle.size);
+      const result = await SolverEngine.solve(puzzle.type, solverConfig.algorithm, puzzle.data, puzzle.size, puzzle.rows, puzzle.cols);
       
-      const shouldAnimate = puzzle.type === 'maze' && !solverConfig.instant && result.visited && puzzle.size <= 300;
+      const isSliding = puzzle.type === 'sliding-puzzle';
+      const shouldAnimate = (isSliding || (puzzle.type === 'maze' && puzzle.size <= 300)) && !solverConfig.instant;
       
       if (shouldAnimate) {
-        // Animate maze solving
         let speed = Math.max(1, 101 - solverConfig.speed);
-        if (puzzle.size > 100) speed = Math.max(speed, 10); // Limit speed for medium grids
         
-        const visited = result.visited!;
-        const frontier = result.frontier || [];
-        
-        const stepSize = puzzle.size > 100 ? Math.max(5, Math.floor(visited.length / 100)) : 1;
-        
-        for (let i = 0; i < visited.length; i += stepSize) {
-          if (!isSolving) break; // Check if cancelled
+        if (isSliding && result.solution) {
+          const path = result.solution;
+          for (let i = 1; i < path.length; i++) {
+            if (!isSolving) break;
+            const currentGrid = path[i];
+            setPuzzle(prev => prev ? {
+              ...prev,
+              data: {
+                ...prev.data,
+                grid: currentGrid,
+                emptyIdx: currentGrid.indexOf(0)
+              },
+              moves: i
+            } : null);
+            setTimer(Math.floor((performance.now() - solveStartTime) / 1000));
+            await new Promise(r => setTimeout(r, speed * 2)); // Sliding moves need more time to be visible
+          }
+        } else if (puzzle.type === 'maze' && result.visited) {
+          const visited = result.visited!;
+          const frontier = result.frontier || [];
+          const stepSize = puzzle.size > 100 ? Math.max(5, Math.floor(visited.length / 100)) : 1;
           
-          setPuzzle(prev => prev ? {
-            ...prev,
-            data: {
-              ...prev.data,
-              currentVisited: visited.slice(0, i + 1),
-              currentFrontier: frontier.slice(0, i + 1)
-            }
-          } : null);
-          
-          await new Promise(r => setTimeout(r, speed));
+          for (let i = 0; i < visited.length; i += stepSize) {
+            if (!isSolving) break;
+            setPuzzle(prev => prev ? {
+              ...prev,
+              data: {
+                ...prev.data,
+                currentVisited: visited.slice(0, i + 1),
+                currentFrontier: frontier.slice(0, i + 1)
+              }
+            } : null);
+            setTimer(Math.floor((performance.now() - solveStartTime) / 1000));
+            await new Promise(r => setTimeout(r, speed));
+          }
         }
       }
 
-      setPuzzle(prev => prev ? {
-        ...prev,
-        solution: result.solution,
-        isSolved: true,
-        solveStats: result.stats
-      } : null);
+      const solveEndTime = performance.now();
+      const finalStats = {
+        ...result.stats,
+        timeMs: solveEndTime - solveStartTime
+      };
+
+      setPuzzle(prev => {
+        if (!prev) return null;
+        
+        if (!result.solution) {
+          setError("Unsolvable puzzle or search space exceeded.");
+          return prev;
+        }
+
+        let newData = JSON.parse(JSON.stringify(prev.data));
+        if (['sudoku', 'math-latin-square', 'kenken', 'nonogram', 'sliding-puzzle'].includes(prev.type)) {
+          if (prev.type === 'nonogram') {
+            newData.userGrid = JSON.parse(JSON.stringify(result.solution));
+          } else if (prev.type === 'math-latin-square' || prev.type === 'kenken') {
+            newData.grid = JSON.parse(JSON.stringify(result.solution));
+          } else if (prev.type === 'sliding-puzzle') {
+            const path = result.solution;
+            const lastGrid = path[path.length - 1];
+            newData.grid = JSON.parse(JSON.stringify(lastGrid));
+            newData.emptyIdx = lastGrid.indexOf(0);
+          } else {
+            newData = JSON.parse(JSON.stringify(result.solution));
+          }
+        }
+
+        return {
+          ...prev,
+          data: newData,
+          solution: result.solution,
+          isSolved: true,
+          solveStats: finalStats,
+          moves: isSliding ? (result.solution.length - 1) : prev.moves
+        };
+      });
+      
+      setTimer(Math.floor((solveEndTime - solveStartTime) / 1000));
+      setSuccess("Solved Correctly");
+      setValidation({ isValid: true, isComplete: true, isFull: true, conflicts: [], errors: [] });
     } catch (err: any) {
+      console.error("Solve failed:", err);
       setError(err.message || "Solving failed.");
     } finally {
       setIsSolving(false);
@@ -160,20 +286,63 @@ export default function App() {
   };
 
   const handleCellClick = (r: number, c: number) => {
-    if (!puzzle || isSolving || puzzle.isSolved) return;
+    if (!puzzle || isSolving || puzzle.isSolved || isPaused) return;
+    setError(null);
+    setSuccess(null);
+
+    if (puzzle.type === 'sudoku' || puzzle.type === 'kenken' || puzzle.type === 'math-latin-square') {
+      setSelectedCell({ r, c });
+      return;
+    }
 
     if (puzzle.type === 'sliding-puzzle') {
-      const { grid, emptyPos } = puzzle.data;
-      const dr = Math.abs(r - emptyPos.r);
-      const dc = Math.abs(c - emptyPos.c);
-      if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
-        const newGrid = grid.map((row: any) => [...row]);
-        newGrid[emptyPos.r][emptyPos.c] = newGrid[r][c];
-        newGrid[r][c] = 0;
-        setPuzzle({
+      const { grid, emptyIdx, rows, cols } = puzzle.data;
+      const targetIdx = r * cols + c;
+      const emptyR = Math.floor(emptyIdx / cols);
+      const emptyC = emptyIdx % cols;
+
+      // Check if in same row or column
+      if (r === emptyR || c === emptyC) {
+        const newGrid = [...grid];
+        let newEmptyIdx = emptyIdx;
+
+        if (r === emptyR) {
+          // Horizontal shift
+          const step = c < emptyC ? -1 : 1;
+          for (let currC = emptyC; currC !== c; currC += step) {
+            const fromIdx = emptyR * cols + (currC + step);
+            const toIdx = emptyR * cols + currC;
+            newGrid[toIdx] = newGrid[fromIdx];
+          }
+          newGrid[targetIdx] = 0;
+          newEmptyIdx = targetIdx;
+        } else {
+          // Vertical shift
+          const step = r < emptyR ? -1 : 1;
+          for (let currR = emptyR; currR !== r; currR += step) {
+            const fromIdx = (currR + step) * cols + c;
+            const toIdx = currR * cols + c;
+            newGrid[toIdx] = newGrid[fromIdx];
+          }
+          newGrid[targetIdx] = 0;
+          newEmptyIdx = targetIdx;
+        }
+
+        const newPuzzle = {
           ...puzzle,
-          data: { grid: newGrid, emptyPos: { r, c } }
-        });
+          data: { ...puzzle.data, grid: newGrid, emptyIdx: newEmptyIdx },
+          moves: (puzzle.moves || 0) + 1,
+          undoStack: [...(puzzle.undoStack || []), JSON.parse(JSON.stringify(puzzle.data))]
+        };
+
+        // Check win
+        const isWin = SlidingPuzzleEngine.isSolved(newGrid);
+        if (isWin) {
+          setSuccess("Solved Correctly");
+          newPuzzle.isSolved = true;
+          setValidation({ isValid: true, isComplete: true, isFull: true, conflicts: [], errors: [] });
+        }
+        setPuzzle(newPuzzle);
       }
     } else if (puzzle.type === 'minesweeper') {
       if (puzzle.data.revealed[r][c]) return;
@@ -189,31 +358,67 @@ export default function App() {
         });
       }
     } else if (puzzle.type === 'maze') {
-      if (puzzle.data.grid[r][c] === 1) return; // Cannot place on wall
+      if (puzzle.data.grid[r][c] === 1) {
+        setError("Cannot place Start/End on a wall.");
+        return;
+      }
       
       const isStart = r === puzzle.data.start.r && c === puzzle.data.start.c;
       const isEnd = r === puzzle.data.end.r && c === puzzle.data.end.c;
       
-      if (isStart || isEnd) return; // Already there
-
-      const distStart = Math.abs(r - puzzle.data.start.r) + Math.abs(c - puzzle.data.start.c);
-      const distEnd = Math.abs(r - puzzle.data.end.r) + Math.abs(c - puzzle.data.end.c);
-      
-      if (distStart < distEnd) {
-        setPuzzle({
-          ...puzzle,
-          data: { ...puzzle.data, start: { r, c } },
-          isSolved: false,
-          solution: undefined
-        });
-      } else {
-        setPuzzle({
-          ...puzzle,
-          data: { ...puzzle.data, end: { r, c } },
-          isSolved: false,
-          solution: undefined
-        });
+      if (isStart) {
+        setIsDragging(isDragging === 'start' ? null : 'start');
+        setSuccess(isDragging === 'start' ? null : "Start node selected. Click an empty cell to move it.");
+        setError(null);
+        return;
       }
+      if (isEnd) {
+        setIsDragging(isDragging === 'end' ? null : 'end');
+        setSuccess(isDragging === 'end' ? null : "End node selected. Click an empty cell to move it.");
+        setError(null);
+        return;
+      }
+
+      if (isDragging) {
+        const newData = { ...puzzle.data };
+        if (isDragging === 'start') {
+          if (r === newData.end.r && c === newData.end.c) {
+            setError("Start and End cannot be on the same cell.");
+            return;
+          }
+          newData.start = { r, c };
+        } else {
+          if (r === newData.start.r && c === newData.start.c) {
+            setError("Start and End cannot be on the same cell.");
+            return;
+          }
+          newData.end = { r, c };
+        }
+        
+        setPuzzle({
+          ...puzzle,
+          data: newData,
+          isSolved: false,
+          solution: undefined
+        });
+        setIsDragging(null);
+        setSuccess(null);
+        setError(null);
+      } else {
+        setSuccess("Click the Start (S) or End (E) node to move it.");
+      }
+    }
+ else if (puzzle.type === 'n-queens') {
+      const newQueens = [...puzzle.data];
+      if (newQueens[c] === r) {
+        newQueens[c] = -1; // Remove
+      } else {
+        newQueens[c] = r; // Place
+      }
+      setPuzzle({
+        ...puzzle,
+        data: newQueens
+      });
     } else if (puzzle.type === 'nonogram') {
       const newGrid = puzzle.data.userGrid.map((row: any) => [...row]);
       // Cycle: 0 -> 1 -> -1 -> 0
@@ -225,57 +430,121 @@ export default function App() {
         ...puzzle,
         data: { ...puzzle.data, userGrid: newGrid }
       });
-    } else if (puzzle.type === 'kenken') {
-      const val = prompt(`Enter number (1-${puzzle.size}):`);
-      if (val === null) return;
-      const num = parseInt(val);
-      if (isNaN(num) || num < 0 || num > puzzle.size) return;
-      
-      const newGrid = puzzle.data.grid.map((row: any) => [...row]);
-      newGrid[r][c] = num;
-      setPuzzle({
-        ...puzzle,
-        data: { ...puzzle.data, grid: newGrid }
-      });
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!puzzle || !selectedCell || isSolving || puzzle.isSolved || isPaused) return;
+
+    if (['sudoku', 'kenken', 'math-latin-square'].includes(puzzle.type)) {
+      const key = e.key;
+      const num = parseInt(key);
+      
+      const isSimpleGrid = puzzle.type === 'sudoku';
+      const currentGrid = isSimpleGrid ? puzzle.data : puzzle.data.grid;
+      
+      if (key === 'Backspace' || key === 'Delete') {
+        const newGrid = currentGrid.map((row: any) => [...row]);
+        newGrid[selectedCell.r][selectedCell.c] = 0;
+        setPuzzle({
+          ...puzzle,
+          data: isSimpleGrid ? newGrid : { ...puzzle.data, grid: newGrid }
+        });
+      } else if (!isNaN(num) && num > 0 && num <= puzzle.size) {
+        const newGrid = currentGrid.map((row: any) => [...row]);
+        newGrid[selectedCell.r][selectedCell.c] = num;
+        setPuzzle({
+          ...puzzle,
+          data: isSimpleGrid ? newGrid : { ...puzzle.data, grid: newGrid }
+        });
+      }
+    }
+  };
+
+  const handleReset = () => {
+    if (!puzzle) return;
+    setPuzzle({
+      ...puzzle,
+      data: JSON.parse(JSON.stringify(puzzle.initialData)),
+      isSolved: false,
+      solution: undefined,
+      solveStats: undefined,
+      moves: 0,
+      undoStack: []
+    });
+    setTimer(0);
+    setError(null);
+    setSuccess(null);
+    setSelectedCell(null);
+  };
+
+  const handleUndo = () => {
+    if (!puzzle || !puzzle.undoStack || puzzle.undoStack.length === 0 || puzzle.isSolved) return;
+    const newStack = [...puzzle.undoStack];
+    const lastData = newStack.pop();
+    setPuzzle({
+      ...puzzle,
+      data: lastData,
+      undoStack: newStack,
+      moves: Math.max(0, (puzzle.moves || 0) - 1)
+    });
+  };
+
+  const handleShuffle = () => {
+    setSeed(null);
+    setGenerationCount(prev => prev + 1);
   };
 
   const handleCheckSolution = () => {
     if (!puzzle) return;
-    let isCorrect = false;
-    if (puzzle.type === 'nonogram') {
-      isCorrect = puzzle.data.userGrid.every((row: any, r: number) => 
-        row.every((val: number, c: number) => {
-          const expected = puzzle.data.solution[r][c];
-          const actual = val === 1 ? 1 : 0;
-          return expected === actual;
-        })
-      );
-    } else if (puzzle.type === 'kenken') {
-      isCorrect = puzzle.data.grid.every((row: any, r: number) => 
-        row.every((val: number, c: number) => val === puzzle.data.solution[r][c])
-      );
-    } else {
-      isCorrect = JSON.stringify(puzzle.data) === JSON.stringify(puzzle.solution);
-    }
+    setError(null);
+    setSuccess(null);
 
-    if (isCorrect) {
-      setPuzzle({ ...puzzle, isSolved: true, solution: puzzle.data.solution || puzzle.solution });
+    const result = ValidationEngine.validate(puzzle.type, puzzle.size, puzzle.data, puzzle.solution, false, puzzle.isSolved);
+    setValidation(result);
+
+    if (result.isComplete) {
+      setSuccess("Solved Correctly");
+      setPuzzle({ ...puzzle, isSolved: true });
+    } else if (!result.isFull) {
+      setError("Incomplete: Some cells are empty.");
+    } else if (!result.isValid) {
+      setError("Incorrect: Constraints violated.");
     } else {
-      setError("Solution is incorrect. Keep trying!");
+      setError("Incomplete: Keep trying!");
     }
   };
 
   const handleRevealSolution = () => {
     if (!puzzle) return;
-    setPuzzle({
+    
+    const revealedPuzzle = {
       ...puzzle,
       isSolved: true,
-      solution: puzzle.data.solution || puzzle.solution
-    });
+      data: JSON.parse(JSON.stringify(puzzle.data))
+    };
+
+    // Overwrite userGrid with solutionGrid
+    if (['sudoku', 'math-latin-square', 'kenken', 'nonogram'].includes(puzzle.type)) {
+      if (puzzle.type === 'nonogram') {
+        revealedPuzzle.data.userGrid = JSON.parse(JSON.stringify(puzzle.solution));
+      } else if (puzzle.type === 'math-latin-square' || puzzle.type === 'kenken') {
+        revealedPuzzle.data.grid = JSON.parse(JSON.stringify(puzzle.solution));
+      } else {
+        revealedPuzzle.data = JSON.parse(JSON.stringify(puzzle.solution));
+      }
+    } else if (puzzle.type === 'sliding-puzzle') {
+      revealedPuzzle.data.grid = JSON.parse(JSON.stringify(puzzle.solution));
+      revealedPuzzle.data.emptyIdx = puzzle.solution.length - 1;
+    }
+
+    setPuzzle(revealedPuzzle);
+    setSuccess("Solved Correctly");
+    setValidation({ isValid: true, isComplete: true, isFull: true, conflicts: [], errors: [] });
+    setError(null);
   };
 
-  const stateSpace = calculateStateSpace(puzzleType, gridSize);
+  const stateSpace = calculateStateSpace(puzzleType, gridSize, puzzle?.rows, puzzle?.cols);
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8 font-sans transition-colors duration-500">
@@ -288,10 +557,10 @@ export default function App() {
           className="flex flex-col"
         >
           <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase italic">
-            Grid Explorer
+            Puzzlotrix
           </h1>
           <p className="text-xs font-bold tracking-[0.3em] uppercase opacity-50">
-            Interactive AI Puzzle Platform
+            Interactive AI Puzzle Solver
           </p>
         </motion.div>
 
@@ -316,6 +585,10 @@ export default function App() {
             setPuzzleType={setPuzzleType}
             gridSize={gridSize}
             setGridSize={setGridSize}
+            rows={rows}
+            setRows={setRows}
+            cols={cols}
+            setCols={setCols}
             seed={seed}
             setSeed={setSeed}
             theme={theme}
@@ -327,6 +600,7 @@ export default function App() {
             onCancel={handleCancel}
             onCheck={handleCheckSolution}
             onReveal={handleRevealSolution}
+            onReset={handleReset}
             isSolving={isSolving}
           />
         </motion.div>
@@ -339,11 +613,19 @@ export default function App() {
         >
           <StatsPanel 
             gridSize={gridSize}
+            rows={puzzle?.rows}
+            cols={puzzle?.cols}
             seed={seed}
             actualSeed={puzzle?.actualSeed}
             stateSpace={stateSpace}
             genTime={genTime}
             solveStats={puzzle?.solveStats}
+            moves={puzzle?.moves}
+            timer={timer}
+            isPaused={isPaused}
+            onTogglePause={() => setIsPaused(!isPaused)}
+            canPause={!!puzzle && !puzzle.isSolved && !isSolving}
+            stateSpaceLabel={puzzleType === 'maze' ? "Number of Perfect Mazes (Spanning Trees)" : "State Space"}
           />
 
           {error && (
@@ -357,6 +639,17 @@ export default function App() {
             </motion.div>
           )}
 
+          {success && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm"
+            >
+              <CheckCircle2 size={18} />
+              {success}
+            </motion.div>
+          )}
+
           <AnimatePresence mode="wait">
             <motion.div
               key={`${puzzleType}-${gridSize}-${seed}-${puzzle?.generationId}-${puzzle?.isSolved}`}
@@ -365,27 +658,57 @@ export default function App() {
               exit={{ opacity: 0, rotateY: -10 }}
               className="w-full flex justify-center relative"
             >
-              {puzzle && puzzle.type === 'sliding-puzzle' && puzzle.size > 4 && puzzle.isSolved && (
+              {puzzle && puzzle.type === 'sliding-puzzle' && (puzzle.rows || 0) * (puzzle.cols || 0) > 16 && puzzle.isSolved && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm p-8 text-center rounded-xl">
                   <div className="max-w-xs">
                     <h3 className="text-xl font-bold text-blue-400 mb-2">Complexity Limit</h3>
                     <p className="text-sm opacity-80">
-                      For grids larger than 4×4, the state space (10^{calculateStateSpace('sliding-puzzle', puzzle.size).toFixed(2)}) 
+                      For grids larger than 4×4, the state space (10^{calculateStateSpace('sliding-puzzle', puzzle.size, puzzle.rows, puzzle.cols).toFixed(2)}) 
                       leads to exponential explosion in A* search. Full pathfinding is disabled to prevent UI freeze.
                     </p>
                   </div>
                 </div>
               )}
-              {puzzle && (
-                <GridRenderer 
-                  type={puzzle.type}
-                  size={puzzle.size}
-                  data={puzzle.data}
-                  solution={puzzle.solution}
-                  isSolved={puzzle.isSolved}
-                  onCellClick={handleCellClick}
-                />
-              )}
+              
+              <div className={`w-full flex justify-center transition-all duration-300 ${isPaused ? 'blur-xl grayscale pointer-events-none opacity-50' : ''}`}>
+                {puzzle && (
+                  <GridRenderer 
+                    type={puzzle.type}
+                    size={puzzle.size}
+                    rows={puzzle.rows}
+                    cols={puzzle.cols}
+                    data={puzzle.data}
+                    solution={puzzle.solution}
+                    isSolved={puzzle.isSolved}
+                    onCellClick={handleCellClick}
+                    selectedCell={selectedCell}
+                    validation={validation}
+                    onKeyDown={handleKeyDown}
+                  />
+                )}
+              </div>
+
+              <AnimatePresence>
+                {isPaused && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 flex flex-col items-center justify-center z-20"
+                  >
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setIsPaused(false)}
+                      className="px-8 py-4 bg-[#FF7A00] text-white font-black uppercase tracking-widest rounded-2xl shadow-2xl shadow-orange-500/40 flex items-center gap-3"
+                    >
+                      <Play size={24} fill="currentColor" />
+                      Resume Game
+                    </motion.button>
+                    <p className="mt-4 text-white font-bold uppercase tracking-[0.3em] text-[10px] opacity-70">Game Paused</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </AnimatePresence>
         </motion.div>

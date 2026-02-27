@@ -9,46 +9,69 @@ export function log10Factorial(n: number): number {
 }
 
 export function formatStateSpace(exponent: number): string {
-  if (exponent > 1e6) {
-    return `10^(${exponent.toExponential(4)})`;
+  if (exponent < 0) return "0";
+  if (exponent < 12) {
+    const val = Math.pow(10, exponent);
+    if (val < 1000000) return Math.round(val).toLocaleString();
+    return val.toExponential(2);
   }
-  return `10^(${exponent.toFixed(6)})`;
+  return `≈ 10^${exponent.toFixed(2)}`;
 }
 
-export function calculateStateSpace(type: string, n: number): number {
+export function calculateStateSpace(type: string, n: number, rows?: number, cols?: number): number {
+  const r = rows || n;
+  const c = cols || n;
+  const total = r * c;
+
   switch (type) {
-    case 'latin-square':
-      // Lower bound for Latin Squares: (n!)^(2n) / n^(n^2) is too complex
-      // Rough estimate: n^(n^2)
-      return n * n * Math.log10(n);
+    case 'math-latin-square':
+      return total * Math.log10(n);
     
     case 'sudoku':
-      if (n === 9) return 21.82; // Known constant for 9x9
-      return n * n * Math.log10(n); // Fallback
+      if (n === 9) return 21.82;
+      return total * Math.log10(n);
     
-    case 'maze':
-      // Number of spanning trees in a grid graph is roughly 3.2^N
-      return n * n * Math.log10(3.2);
+    case 'maze': {
+      // Use the logical grid size (n) directly as the number of cells
+      // This ensures the state space changes with every grid size adjustment
+      const nodesR = n;
+      const nodesC = n;
+      
+      if (nodesR < 2 || nodesC < 2) return 0;
+
+      if (nodesR <= 20 && nodesC <= 20) {
+        // Kirchhoff product formula: T(n,m) = prod_{i=1}^{n-1} prod_{j=1}^{m-1} [4 - 2cos(i*pi/n) - 2cos(j*pi/m)]
+        let logSum = 0;
+        for (let i = 1; i < nodesR; i++) {
+          for (let j = 1; j < nodesC; j++) {
+            const term = 4 - 2 * Math.cos((i * Math.PI) / nodesR) - 2 * Math.cos((j * Math.PI) / nodesC);
+            if (term <= 0) throw new Error("Numerical instability detected");
+            logSum += Math.log(term);
+          }
+        }
+        return logSum / Math.log(10);
+      } else {
+        // Asymptotic approximation for large grids
+        // T(n,m) ≈ 3.209912^(nm)
+        return (nodesR * nodesC) * Math.log10(3.209912);
+      }
+    }
     
     case 'n-queens':
-      // n! permutations
       return log10Factorial(n);
     
     case 'minesweeper':
-      // 2^(n^2)
-      return n * n * Math.log10(2);
+      return total * Math.log10(2);
     
     case 'nonogram':
-      // 2^(n^2)
-      return n * n * Math.log10(2);
+      return total * Math.log10(2);
     
     case 'sliding-puzzle':
-      // (n^2)! / 2
-      return log10Factorial(n * n) - Math.log10(2);
+      // (total)! / 2
+      return log10Factorial(total) - Math.log10(2);
     
     case 'kenken':
-      // Similar to Latin Square
-      return n * n * Math.log10(n);
+      return total * Math.log10(n);
     
     default:
       return 0;

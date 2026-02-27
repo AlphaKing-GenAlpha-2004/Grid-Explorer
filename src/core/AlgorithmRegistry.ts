@@ -21,6 +21,8 @@ export const ALGORITHM_REGISTRY: Record<PuzzleType, AlgorithmInfo[]> = {
     { value: 'bfs', label: 'BFS', description: 'Finds shortest path in unweighted grid.' },
     { value: 'dfs', label: 'DFS', description: 'Explores deep branches first.' },
     { value: 'dijkstra', label: 'Dijkstra', description: 'Weighted shortest path algorithm.' },
+    { value: 'greedy', label: 'Greedy BFS', description: 'Fast but not always optimal.' },
+    { value: 'hybrid', label: 'Dead End Filling', description: 'Prunes dead ends to reveal the path.' },
   ],
   'sudoku': [
     { value: 'backtracking', label: 'Basic Backtracking', description: 'Standard recursive search.' },
@@ -29,10 +31,9 @@ export const ALGORITHM_REGISTRY: Record<PuzzleType, AlgorithmInfo[]> = {
     { value: 'ac3', label: 'AC-3 + Backtracking', description: 'Arc consistency algorithm.' },
     { value: 'hybrid', label: 'Heuristic Hybrid', description: 'Optimized solver for Sudoku.', maxSize: 36 },
   ],
-  'latin-square': [
-    { value: 'backtracking', label: 'Backtracking', description: 'Standard recursive search.' },
-    { value: 'forward-checking', label: 'Forward Checking', description: 'Prunes domains during search.' },
-    { value: 'constraint-propagation', label: 'Constraint Propagation', description: 'Deductive solving.' },
+  'math-latin-square': [
+    { value: 'backtracking', label: 'Backtracking', description: 'Standard recursive search with pruning.' },
+    { value: 'backtracking-mrv', label: 'Heuristic MRV', description: 'Optimized solver for arithmetic constraints.' },
   ],
   'n-queens': [
     { value: 'backtracking', label: 'Backtracking', description: 'Standard recursive search.' },
