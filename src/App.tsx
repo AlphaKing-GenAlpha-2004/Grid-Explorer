@@ -130,7 +130,7 @@ export default function App() {
     try {
       switch (puzzleType) {
         case 'math-latin-square': {
-          const mathData = MathLatinSquareEngine.generate(clampedSize, currentSeed);
+          const mathData = MathLatinSquareEngine.generate(clampedSize, currentSeed, difficulty);
           data = mathData;
           solution = mathData.solution;
           break;
@@ -382,7 +382,7 @@ export default function App() {
     setIsSolving(false);
   };
 
-  const handleCellClick = (r: number, c: number, e?: React.MouseEvent) => {
+  const handleCellClick = (r: number, c: number, e?: React.MouseEvent, val?: number) => {
     if (!puzzle || isSolving || puzzle.isSolved || isPaused) return;
     setError(null);
     setSuccess(null);
@@ -600,10 +600,14 @@ export default function App() {
       });
     } else if (puzzle.type === 'nonogram') {
       const newGrid = puzzle.data.userGrid.map((row: any) => [...row]);
-      // Cycle: 0 -> 1 -> -1 -> 0
-      if (newGrid[r][c] === 0) newGrid[r][c] = 1;
-      else if (newGrid[r][c] === 1) newGrid[r][c] = -1;
-      else newGrid[r][c] = 0;
+      if (val !== undefined) {
+        newGrid[r][c] = val;
+      } else {
+        // Cycle: 0 -> 1 -> -1 -> 0
+        if (newGrid[r][c] === 0) newGrid[r][c] = 1;
+        else if (newGrid[r][c] === 1) newGrid[r][c] = -1;
+        else newGrid[r][c] = 0;
+      }
       
       setPuzzle({
         ...puzzle,
@@ -778,7 +782,7 @@ export default function App() {
     <div className="min-h-screen w-full flex flex-col items-center p-4 md:p-8 font-sans transition-colors duration-500 overflow-y-auto">
       <Background theme={theme} />
       
-      <header className="w-full max-w-6xl flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
+      <header className="w-full max-w-[1600px] flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -835,7 +839,7 @@ export default function App() {
         setUsername={setUsername}
       />
 
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-8 items-start">
+      <main className="w-full max-w-[1600px] grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-8 items-start">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -867,6 +871,8 @@ export default function App() {
             puzzleData={puzzle?.data}
             leaderboard={leaderboard}
             puzzle={puzzle}
+            difficulty={difficulty}
+            setDifficulty={setDifficulty}
           />
         </motion.div>
 

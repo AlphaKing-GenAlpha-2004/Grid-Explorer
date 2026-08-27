@@ -23,6 +23,9 @@ export const GridRenderer: React.FC<GridRendererProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragFillType, setDragFillType] = useState<number | null>(null);
+  const [panning, setPanning] = useState({ x: 0, y: 0 });
   const actualRows = rows || size;
   const actualCols = cols || size;
 
@@ -148,7 +151,7 @@ export const GridRenderer: React.FC<GridRendererProps> = ({
       <div className={containerClasses}>
         {renderMaximizeButton()}
         <div className={`grid-container bg-[#2A2A2A] rounded-2xl border border-white/10 p-4 ${isMaximized ? 'max-w-full max-h-full' : ''}`}>
-          {renderNonogram(actualRows, actualCols, data, solution, isSolved, onCellClick)}
+          {renderNonogram(actualRows, actualCols, data, solution, isSolved, isDragging, setIsDragging, dragFillType, setDragFillType, onCellClick)}
         </div>
       </div>
     );
@@ -181,20 +184,23 @@ export const GridRenderer: React.FC<GridRendererProps> = ({
     <div className={containerClasses}>
       {renderMaximizeButton()}
       <div className="grid-container">
-        <div 
-          className="grid bg-[#1E1E1E] p-2 rounded-xl border border-white/10 shadow-inner outline-none focus:ring-2 focus:ring-[#FF7A00]/50"
+        <motion.div 
+          drag={size > 10}
+          dragConstraints={{ left: -2000, right: 2000, top: -2000, bottom: 2000 }}
+          dragElastic={0.05}
+          className={`grid bg-[#1E1E1E] p-2 rounded-xl border border-white/10 shadow-inner outline-none focus:ring-2 focus:ring-[#FF7A00]/50 ${size > 10 ? 'cursor-grab active:cursor-grabbing' : ''}`}
           tabIndex={0}
           onKeyDown={onKeyDown}
           style={{
             gridTemplateColumns: `repeat(${actualCols}, 1fr)`,
             gridTemplateRows: `repeat(${actualRows}, 1fr)`,
             width: '100%',
-            maxWidth: isMaximized ? '90vh' : '600px',
+            maxWidth: isMaximized ? '90vh' : '1000px',
             aspectRatio: `${actualCols}/${actualRows}`
           }}
         >
-          {renderDOMGrid(type, size, actualRows, actualCols, data, solution, isSolved, onCellClick, selectedCell, validation)}
-        </div>
+          {renderDOMGrid(type, size, actualRows, actualCols, data, solution, isSolved, isDragging, setIsDragging, dragFillType, setDragFillType, onCellClick, selectedCell, validation)}
+        </motion.div>
       </div>
     </div>
   );
@@ -285,14 +291,17 @@ const renderMathLatinSquare = (
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full">
+    <div className="flex flex-col items-center gap-4 w-full overflow-auto p-4">
        <div className="flex justify-around w-full px-4 py-2 bg-white/5 rounded-xl border border-white/10 text-[#FF7A00] font-mono text-xl mb-4">
           <span>∑</span>
           <span className="text-xs opacity-50 uppercase tracking-widest self-center text-[#EAEAEA]">Arithmetic Latin Square</span>
           <span>∏</span>
         </div>
-       <div 
-         className="grid items-center justify-center outline-none focus:ring-2 focus:ring-[#FF7A00]/50"
+       <motion.div 
+         drag={size > 6}
+         dragConstraints={{ left: -1000, right: 1000, top: -1000, bottom: 1000 }}
+         dragElastic={0.1}
+         className={`grid items-center justify-center outline-none focus:ring-2 focus:ring-[#FF7A00]/50 ${size > 6 ? 'cursor-grab active:cursor-grabbing' : ''}`}
          tabIndex={0}
          onKeyDown={onKeyDown}
          style={{
@@ -301,18 +310,63 @@ const renderMathLatinSquare = (
          }}
        >
          {elements}
-       </div>
+       </motion.div>
     </div>
   );
 };
 
-const renderNonogram = (rows: number, cols: number, data: any, solution: any, isSolved: boolean, onCellClick?: (r: number, c: number, e?: React.MouseEvent) => void) => {
+const renderNonogram = (
+  rows: number, 
+  cols: number, 
+  data: any, 
+  solution: any, 
+  isSolved: boolean, 
+  isDragging: boolean,
+  setIsDragging: (d: boolean) => void,
+  dragFillType: number | null,
+  setDragFillType: (t: number | null) => void,
+  onCellClick?: (r: number, c: number, e?: React.MouseEvent) => void
+) => {
   const { userGrid, clues } = data;
   const { rowClues, colClues } = clues;
   const displayGrid = isSolved ? solution : userGrid;
   
+  const handleMouseDown = (r: number, c: number, e: React.MouseEvent) => {
+    if (isSolved) return;
+    setIsDragging(true);
+    const currentVal = userGrid[r][c];
+    // If left click, cycle 0 -> 1 -> 0
+    // If right click, cycle 0 -> -1 -> 0
+    let nextVal = 0;
+    if (e.button === 0) {
+      nextVal = currentVal === 1 ? 0 : 1;
+    } else if (e.button === 2) {
+      nextVal = currentVal === -1 ? 0 : -1;
+    }
+    setDragFillType(nextVal);
+    onCellClick?.(r, c, e);
+  };
+
+  const handleMouseEnter = (r: number, c: number, e: React.MouseEvent) => {
+    if (isDragging && dragFillType !== null) {
+      if (userGrid[r][c] !== dragFillType) {
+        (onCellClick as any)?.(r, c, e, dragFillType);
+      }
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setDragFillType(null);
+  };
+
   return (
-    <div className="relative" style={{ width: 'fit-content', height: 'fit-content' }}>
+    <div 
+      className="relative select-none" 
+      style={{ width: 'fit-content', height: 'fit-content' }}
+      onMouseLeave={handleMouseUp}
+      onMouseUp={handleMouseUp}
+    >
       <div className="flex sticky top-0 z-30 bg-[#2A2A2A]">
         {/* Corner spacer */}
         <div className="w-16 md:w-24 shrink-0 sticky left-0 z-40 bg-[#2A2A2A]" />
@@ -362,11 +416,9 @@ const renderNonogram = (rows: number, cols: number, data: any, solution: any, is
               <div 
                 key={`${r}-${c}`} 
                 className={cellClass}
-                onClick={(e) => onCellClick?.(r, c, e)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onCellClick?.(r, c, e);
-                }}
+                onMouseDown={(e) => handleMouseDown(r, c, e)}
+                onMouseEnter={(e) => handleMouseEnter(r, c, e)}
+                onContextMenu={(e) => e.preventDefault()}
               >
                 {val === -1 && <span className="text-[#FF4C4C] text-xs">×</span>}
               </div>
@@ -386,6 +438,10 @@ const renderDOMGrid = (
   data: any, 
   solution: any, 
   isSolved: boolean, 
+  isDragging: boolean,
+  setIsDragging: (d: boolean) => void,
+  dragFillType: number | null,
+  setDragFillType: (t: number | null) => void,
   onCellClick?: (r: number, c: number, e?: React.MouseEvent) => void,
   selectedCell?: { r: number; c: number } | null,
   validation?: ValidationResult
@@ -495,9 +551,37 @@ const renderDOMGrid = (
           cellClass += " bg-transparent border-none";
         }
 
+        const dragDirection = isMovable ? (r === emptyR ? "x" : "y") : false;
+
         cells.push(
           <motion.div 
             layout={rows * cols <= 400}
+            drag={dragDirection}
+            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(e, info) => {
+              if (isMovable) {
+                const threshold = 20;
+                const { x, y } = info.offset;
+                const isHorizontal = r === emptyR;
+                const isVertical = c === emptyC;
+                
+                let shouldMove = false;
+                if (isHorizontal) {
+                  const direction = c < emptyC ? 1 : -1; // Dragging towards empty cell
+                  if (direction === 1 && x > threshold) shouldMove = true;
+                  if (direction === -1 && x < -threshold) shouldMove = true;
+                } else if (isVertical) {
+                  const direction = r < emptyR ? 1 : -1;
+                  if (direction === 1 && y > threshold) shouldMove = true;
+                  if (direction === -1 && y < -threshold) shouldMove = true;
+                }
+
+                if (shouldMove) {
+                  onCellClick?.(r, c);
+                }
+              }
+            }}
             key={val === 0 ? `empty-${r}-${c}` : `tile-${val}`} 
             className={cellClass}
             onClick={(e) => onCellClick?.(r, c, e)}

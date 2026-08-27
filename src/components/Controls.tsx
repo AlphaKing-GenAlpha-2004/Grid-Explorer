@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PuzzleType, ThemeType, AlgorithmType, SolverConfig } from '../types';
+import { PuzzleType, ThemeType, AlgorithmType, SolverConfig, Difficulty } from '../types';
 import { RefreshCw, Play, Shuffle, X, Settings2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getAlgorithmsForPuzzle, MAZE_GEN_ALGORITHMS } from '../core/AlgorithmRegistry';
 import { MIN_GRID_SIZE, MAX_GRID_SIZE, THEME_COLORS } from '../constants';
@@ -33,6 +33,8 @@ interface ControlsProps {
   puzzleData?: any;
   leaderboard?: any[];
   puzzle?: any;
+  difficulty: Difficulty;
+  setDifficulty: (d: Difficulty) => void;
 }
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -48,7 +50,9 @@ export const Controls: React.FC<ControlsProps> = ({
   currentGrid,
   puzzleData,
   leaderboard = [],
-  puzzle
+  puzzle,
+  difficulty,
+  setDifficulty
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -102,6 +106,26 @@ export const Controls: React.FC<ControlsProps> = ({
       </div>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Difficulty</label>
+            <div className="grid grid-cols-4 gap-2">
+              {(['easy', 'medium', 'hard', 'expert'] as Difficulty[]).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDifficulty(d)}
+                  disabled={isSolving}
+                  className={`py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl border transition-all ${
+                    difficulty === d 
+                      ? 'bg-[#FF7A00] border-[#FF7A00] text-white shadow-lg shadow-orange-900/20' 
+                      : 'bg-black/40 border-white/10 text-white/50 hover:border-white/30'
+                  } disabled:opacity-50`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {puzzleType === 'maze' && (
             <div className="space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-widest opacity-60">Maze Generation Algorithm</label>
@@ -161,7 +185,7 @@ export const Controls: React.FC<ControlsProps> = ({
                 <input
                   type="range"
                   min={3}
-                  max={10}
+                  max={20}
                   value={rows}
                   disabled={isSolving}
                   onChange={(e) => setRows?.(parseInt(e.target.value))}
@@ -170,10 +194,10 @@ export const Controls: React.FC<ControlsProps> = ({
                 <input 
                   type="number"
                   min={3}
-                  max={10}
+                  max={20}
                   value={rows}
                   disabled={isSolving}
-                  onChange={(e) => setRows?.(Math.max(3, Math.min(10, parseInt(e.target.value) || 3)))}
+                  onChange={(e) => setRows?.(Math.max(3, Math.min(20, parseInt(e.target.value) || 3)))}
                   className="w-16 bg-black/40 border border-white/10 rounded-lg p-1 text-center text-xs outline-none focus:border-[#FF7A00] disabled:opacity-50"
                 />
               </div>
@@ -186,7 +210,7 @@ export const Controls: React.FC<ControlsProps> = ({
                 <input
                   type="range"
                   min={3}
-                  max={10}
+                  max={20}
                   value={cols}
                   disabled={isSolving}
                   onChange={(e) => setCols?.(parseInt(e.target.value))}
@@ -195,10 +219,10 @@ export const Controls: React.FC<ControlsProps> = ({
                 <input 
                   type="number"
                   min={3}
-                  max={10}
+                  max={20}
                   value={cols}
                   disabled={isSolving}
-                  onChange={(e) => setCols?.(Math.max(3, Math.min(10, parseInt(e.target.value) || 3)))}
+                  onChange={(e) => setCols?.(Math.max(3, Math.min(20, parseInt(e.target.value) || 3)))}
                   className="w-16 bg-black/40 border border-white/10 rounded-lg p-1 text-center text-xs outline-none focus:border-[#FF7A00] disabled:opacity-50"
                 />
               </div>
@@ -216,13 +240,13 @@ export const Controls: React.FC<ControlsProps> = ({
               <input
                 type="range"
                 min={puzzleType === 'n-queens' ? 4 : MIN_GRID_SIZE}
-                max={puzzleType === 'sudoku' ? 64 : MAX_GRID_SIZE}
+                max={puzzleType === 'sudoku' ? 100 : MAX_GRID_SIZE}
                 value={gridSize}
                 disabled={isSolving}
                 onChange={(e) => {
                   let val = parseInt(e.target.value);
                   if (puzzleType === 'sudoku') {
-                    val = Math.min(64, val);
+                    val = Math.min(100, val);
                     const root = Math.sqrt(val);
                     if (!Number.isInteger(root)) {
                       const nearestRoot = Math.round(root);
@@ -236,11 +260,11 @@ export const Controls: React.FC<ControlsProps> = ({
               <input 
                 type="number"
                 min={puzzleType === 'n-queens' ? 4 : MIN_GRID_SIZE}
-                max={puzzleType === 'sudoku' ? 64 : MAX_GRID_SIZE}
+                max={puzzleType === 'sudoku' ? 100 : MAX_GRID_SIZE}
                 value={gridSize}
                 disabled={isSolving}
                 onChange={(e) => {
-                  const maxLimit = puzzleType === 'sudoku' ? 64 : MAX_GRID_SIZE;
+                  const maxLimit = puzzleType === 'sudoku' ? 100 : MAX_GRID_SIZE;
                   const minLimit = puzzleType === 'n-queens' ? 4 : MIN_GRID_SIZE;
                   let val = parseInt(e.target.value) || minLimit;
                   val = Math.max(minLimit, Math.min(maxLimit, val));

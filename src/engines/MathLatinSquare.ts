@@ -1,9 +1,9 @@
 import { RNG } from '../utils/rng';
 import { LatinSquareEngine } from './LatinSquare';
-import { MathLatinSquareData, MathOp } from '../types';
+import { MathLatinSquareData, MathOp, Difficulty } from '../types';
 
 export class MathLatinSquareEngine {
-  static generate(size: number, seed: number): MathLatinSquareData {
+  static generate(size: number, seed: number, difficulty: Difficulty = 'medium'): MathLatinSquareData {
     const rng = new RNG(seed);
     
     // Step 1: Generate valid Latin square solution grid
@@ -103,7 +103,13 @@ export class MathLatinSquareEngine {
 
     // Step 5: Hide selected cells to create puzzle
     // For Math Latin Square, we can hide more cells because arithmetic provides extra constraints
-    const grid = solution.map(row => row.map(val => (rng.next() > 0.3 ? 0 : val)));
+    let hideProbability = 0.3;
+    if (difficulty === 'easy') hideProbability = 0.2;
+    else if (difficulty === 'medium') hideProbability = 0.4;
+    else if (difficulty === 'hard') hideProbability = 0.6;
+    else if (difficulty === 'expert') hideProbability = 0.8;
+
+    const grid = solution.map(row => row.map(val => (rng.next() > hideProbability ? 0 : val)));
 
     return {
       grid,
